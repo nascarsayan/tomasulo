@@ -98,7 +98,7 @@ class ALU:
     return self.endT
 
   def isBusy(self):
-    return self.endT < currT # TODO: account the condition when both the ALU produce result at the same time
+    return self.endT < currT
 
   def broadcast(self, bus):
     if self.opcode is None:
@@ -163,17 +163,23 @@ class ReserALU:
     self.RS = [ReserSt(st + i) for i in range(size)]
     self.alu = ALU(functs)
     self.valid = [0] * self.size
+    self.freed = [None] * self.size
+
+  def getUsage(self):
+    return [sum(x) for x in zip(self.valid, [1 if t == currT else 0 for t in self.freed])]
 
   def getr(self, idx):
     return self.RS[idx]
 
   def setr(self, instr, rat):
-    emppos = self.valid.index(0)
+    usage = self.getUsage()
+    emppos = usage.index(0)
     self.RS[emppos].setr(instr, rat)
     self.valid[emppos] = 1
 
   def isFull(self):
-    return sum(self.valid) == self.size
+    usage = self.getUsage()
+    return sum(usage) >= self.size
 
   def capture(self, busdata):
     for RSi in self.RS:
@@ -181,6 +187,7 @@ class ReserALU:
 
   def clear(self, idx):
     self.valid[idx] = 0
+    self.freed[idx] = currT
 
   def dispatch(self):
     if not self.alu.isBusy():
@@ -306,3 +313,4 @@ for currT in range(T):
 
   # broadcast
   rsg.broadcast(bus)
+  print(rsg)
