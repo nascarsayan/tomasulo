@@ -25,7 +25,7 @@ class InstrQ:
 class RF:
   def __init__(self, size=8):
     self.size = size
-    self.reg = defaultdict(lambda x: None)
+    self.reg = [None] * self.size
   
   def setr(self, idx, val):
     self.reg[idx] = val
@@ -38,7 +38,7 @@ class RF:
 class RAT:
   def __init__(self, rf, size=8):
     self.size = size
-    self.reg = defaultdict(lambda x: None)
+    self.reg = [None] * self.size
     self.rf = rf
   
   def setr(self, idx, val):
@@ -48,7 +48,14 @@ class RAT:
     ref = self.reg[idx]
     if ref:
       return ('RAT', ref)
-    return ('ABS', rf.getr(idx))
+    return ('ABS', self.rf.getr(idx))
+
+  def clear(self, bus):
+    busdata = bus.getb()
+    rspos = self.reg.index(busdata['rs'])
+    if rspos:
+      self.rf[rspos] = busdata['val']
+      self.reg[rspos] = None
 
 
 class Bus:
@@ -142,21 +149,25 @@ class ReserALU:
     self.size = size
     self.RS = [ReserSt(st + i) for i in range(size)]
     self.alu = ALU(functs)
-    self.pos = 0
+    self.valid = [0] * self.size
   
   def getr(self, idx):
     return self.RS[idx]
 
   def setr(self, instr, rat):
-    self.RS[self.pos].setr(instr, rat)
-    self.pos += 1
+    emppos = self.valid.index(0)
+    self.RS[emppos].setr(instr, rat)
+    self.valid[emppos] = 1
 
   def isFull(self):
-    return self.pos == self.size
+    return sum(self.valid) == self.size
 
   def capture(self, busdata):
     for RSi in self.RS:
       RSi.capture(busdata)
+  
+  def clear(self, idx):
+    self.valid[idx] = 0
       
   def __str__(self):
     return json.dumps(map(lambda x: x.content, self.RS))
@@ -185,19 +196,24 @@ class ReserStGrp:
     return self.RG['M'].getr(idx - self.RG['A'].size)
   
   def setr(self, instr):
-    if instr[0] < 2:
+    if instr[0] < self.RG['A'].size:
       self.RG['A'].setr(instr, self.rat)
     self.RG['M'].setr(instr, self.rat)
   
   def isFull(self, instr):
-    if instr[0] < 2:
+    if instr[0] < self.RG['A'].size:
       return self.RG['A'].isFull()
     return self.RG['M'].isFull()
 
-  def capture(self, busdata):
+  def capture(self, bus):
+    busdata = bus.getb()
     if busdata:
       self.RG['A'].capture(busdata)
       self.RG['M'].capture(busdata)
+      if busdata['rs'] < self.RG['A'].size:
+        self.RG['A'].clear(busdata['rs'])
+      else:
+        self.RG['M'].clear(busdata['rs'] - self.RG['A'].size)
 
   def __str__(self):
     RG = {}
@@ -228,6 +244,8 @@ for currT in range(T):
     iq.pop()
   
   # capture
-  rsg.capture(bus.getb())
+  rsg.capture(bus)
+  rat.clear(bus)
 
-  # 
+  # dispatch
+
