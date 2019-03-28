@@ -144,8 +144,13 @@ class ReserSt:
     self.valid = False
 
   def dispatch(self, alu):
-    if self.content['j'][0] == 'ABS' and self.content['k'][0] == 'ABS' and self.t['issue'] != currT:
-      return (True, alu.execute([self.content['op'], self.content['idx'], self.content['j'][1], self.content['k'][1]]))
+    if self.content['j'][0] == 'ABS' and self.content['k'][
+        0] == 'ABS' and self.t['issue'] != currT:
+      return (True,
+              alu.execute([
+                  self.content['op'], self.content['idx'], self.content['j'][1],
+                  self.content['k'][1]
+              ]))
     return (False, None)
 
   def __str__(self):
@@ -166,7 +171,10 @@ class ReserALU:
     self.freed = [None] * self.size
 
   def getUsage(self):
-    return [sum(x) for x in zip(self.valid, [1 if t == currT else 0 for t in self.freed])]
+    return [
+        sum(x)
+        for x in zip(self.valid, [1 if t == currT else 0 for t in self.freed])
+    ]
 
   def getr(self, idx):
     return self.RS[idx]
@@ -209,29 +217,29 @@ class ReserStGrp:
   def __init__(self, rat, A=3, M=2):
     self.RG = {
         'A':
-            ReserALU('M', M, [
+            ReserALU('A', A, [
                 {
-                  'opcode': 0,
-                  'funct': (lambda x, y: x + y),
-                  't': 2,
+                    'opcode': 0,
+                    'funct': (lambda x, y: x + y),
+                    't': 2,
                 },
                 {
-                  'opcode': 1,
-                  'funct': (lambda x, y: x - y),
-                  't': 2,
+                    'opcode': 1,
+                    'funct': (lambda x, y: x - y),
+                    't': 2,
                 },
             ]),
         'M':
             ReserALU('M', M, [
                 {
-                  'opcode': 2,
-                  'funct': (lambda x, y: x * y),
-                  't': 10,
+                    'opcode': 2,
+                    'funct': (lambda x, y: x * y),
+                    't': 10,
                 },
                 {
-                  'opcode': 3,
-                  'funct': (lambda x, y: x / y),
-                  't': 40
+                    'opcode': 3,
+                    'funct': (lambda x, y: x / y),
+                    't': 40
                 },
             ], A)
     }
