@@ -7,7 +7,7 @@
 - pip3 packages:
   * tabulate ; Used to print pretty tables
 
-To install these:
+To install these and run:
 
 ```sh
 pip3 -m venv venv

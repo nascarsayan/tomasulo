@@ -304,7 +304,7 @@ class ReserStGrp:
 
   def capture(self, bus):
     busdata = bus.getb()
-    if busdata['rs']:
+    if busdata['rs'] is not None:
       self.RG['A'].capture(busdata)
       self.RG['M'].capture(busdata)
       if busdata['rs'] < self.RG['A'].size:
@@ -357,12 +357,12 @@ for currT in range(1, T + 1):
       rsg.setr(instr)
       iq.pop()
 
+  # broadcast
+  rsg.broadcast(bus)
+
   # capture
   rsg.capture(bus)
   rat.clear(bus)
-
-  # broadcast
-  rsg.broadcast(bus)
 
   # dispatch
   rsg.dispatch()
