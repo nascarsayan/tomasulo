@@ -8,6 +8,14 @@ NREGS = 8
 clin = lambda: input().strip()
 remNone = lambda x: map(lambda y: '' if y is None or False else y, x)
 
+def printState(rsg, rat, iq):
+  print(' ### RESERVATION STATION ###')
+  print(rsg)
+  print(' ### RAT ###')
+  print(rat)
+  print(' ### INSTRUCTION QUEUE ###')
+  print(iq)
+
 class InstrQ:
 
   def __init__(self):
@@ -67,8 +75,8 @@ class RAT:
 
   def clear(self, bus):
     busdata = bus.getb()
-    # if busdata is None:
-    #   return
+    if busdata['rs'] is None:
+      return
     try:
       rspos = self.regFile.index(busdata['rs'])
       self.rf.setr(rspos, busdata['val'])
@@ -78,7 +86,7 @@ class RAT:
 
   def __repr__(self):
     headers = ['#', 'RF', 'RAT']
-    table = remNone([[i, self.rf.getr(i), 'RS%d' % reg if reg is not None else reg] for (i, reg) in enumerate(self.regFile)])
+    table = [remNone([i, self.rf.getr(i), 'RS%d' % reg if reg is not None else reg]) for (i, reg) in enumerate(self.regFile)]
     return tabulate(table, headers, tablefmt='fancy_grid')
   
   def __str__(self):
@@ -97,7 +105,7 @@ class Bus:
     self.data = data
 
   def __repr__(self):
-    return tabulate(remNone([self.data['rs'], self.data['val']]), ['RS', 'VAL'], tablefmt='fancy_grid')
+    return tabulate([remNone([self.data['rs'], self.data['val']])], ['RS', 'VAL'], tablefmt='fancy_grid')
 
   def __str__(self):
     return repr(self)
@@ -123,7 +131,7 @@ class ALU:
     self.res = res
     self.op1 = op1
     self.op2 = op2
-    print('!!!!!!!! ALU exected till %d!!!!!!!\n' %self.endT)
+    # print('!!!!!!!! ALU exected till %d!!!!!!!\n' %self.endT)
     return self.endT
 
   def isBusy(self):
@@ -143,15 +151,20 @@ class ALU:
 class ReserSt:
 
   def __init__(self, idx=None):
-    fields = ['op', 'j', 'k', 'disp']
     self.content = {
       'idx': idx,
-      'busy': 0,
-      'disp': None,
     }
-    self.t = {'issue': None, 'capture': None}
-    for field in fields:
+    self.t = {}
+    self.clear()
+    
+  def clear(self):
+    self.content['busy'] = 0
+    cfields = ['disp', 'op', 'j', 'k']
+    for field in cfields:
       self.content[field] = None
+    tfields = ['issue', 'dispatch']
+    for field in tfields:
+      self.t[field] = None
 
   def setr(self, instr, rat):
     [opcode, res, op1, op2] = instr
@@ -167,9 +180,6 @@ class ReserSt:
       self.content['j'] = ('ABS', busdata['val'])
     if self.content['k'] == ('RAT', busdata['rs']):
       self.content['k'] = ('ABS', busdata['val'])
-
-  def clear(self):
-    self.__init__()
 
   def free(self):
     self.content['busy'] = 0
@@ -235,7 +245,7 @@ class ReserALU:
       RSi.capture(busdata)
 
   def clear(self, idx):
-    self.RS[idx].free()
+    self.RS[idx].clear()
     self.valid[idx] = 0
     self.freed[idx] = currT
 
@@ -323,7 +333,7 @@ class ReserStGrp:
     self.RG['M'].broadcast(bus)
 
   def __repr__(self):
-    headers = ['RS', 'Busy', 'Op', 'Vj', 'Vk', 'Qj', 'Qk', 'Disp']
+    headers = ['RS#', 'Busy', 'Op', 'Vj', 'Vk', 'Qj', 'Qk', 'Disp']
     table = []
     for t in self.types:
       table.extend(self.RG[t].getEntries())
@@ -347,6 +357,9 @@ for i in range(nins):
 for i in range(NREGS):
   rf.setr(i, int(clin()))
 
+print('\n\n @@@ CLOCK CYCLE = 0 @@@\n\n')
+printState(rsg, rat, iq)
+
 for currT in range(1, T + 1):
   print('\n\n @@@ CLOCK CYCLE = %d @@@\n\n' % (currT))
   
@@ -366,11 +379,5 @@ for currT in range(1, T + 1):
 
   # dispatch
   rsg.dispatch()
-  
 
-  print(' ### RESERVATION STATION ###')
-  print(rsg)
-  print(' ### RAT ###')
-  print(rat)
-  print(' ### INSTRUCTION QUEUE ###')
-  print(iq)
+  printState(rsg, rat, iq)
