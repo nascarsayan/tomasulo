@@ -532,7 +532,7 @@ print('\n\n @@@ CLOCK CYCLE = 0 @@@\n\n')
 printState(rsg, rat, iq)
 
 for currT in range(1, T + 1):
-  
+
   print('\n\n @@@ CLOCK CYCLE = %d @@@\n\n' % (currT))
 
   # issue
