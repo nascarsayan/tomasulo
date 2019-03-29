@@ -1,6 +1,6 @@
 # Copyright (C) by
-# Sayan Naskar <nasccarsayan@iitkgp.ac.in>
-# Authors: Sayan Naskar <nasccarsayan@iitkgp.ac.in>
+# Sayan Naskar <nascarsayan@iitkgp.ac.in>
+# Authors: Sayan Naskar <nascarsayan@gmail.com>
 """
 Simulate the Tomasulo Algorithm.
 Specifications: ./assgnSpec.pdf
