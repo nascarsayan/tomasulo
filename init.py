@@ -1,15 +1,17 @@
 #%%
 import json
 from collections import defaultdict
+from tabulate import tabulate
 
 NREGS = 8
 clin = lambda: input().strip()
-
+remNone = lambda x: map(lambda y: '' if y is None or False else y, x)
 
 class InstrQ:
 
   def __init__(self):
     self.queue = []
+    self.funcmap = {0: 'ADD', 1: 'SUB', 2: 'MUL', 3: 'DIV'}
 
   def push(self, inst):
     self.queue.append(inst)
@@ -22,33 +24,42 @@ class InstrQ:
 
   def isEmpty(self):
     return not self.queue
+  
+  def __repr__(self):
+    headers = ['OPCODE', 'DST OP', 'SRC OP1', 'SRC OP2']
+    table = []
+    for instr in self.queue:
+      row = [self.funcmap[instr[0]]]
+      row.extend(['RS%d' %i for i in instr[1:]])
+      table.append(row)
+    return tabulate(table, headers, tablefmt='fancy_grid')
 
 
 class RF:
 
   def __init__(self, size=8):
     self.size = size
-    self.reg = [None] * self.size
+    self.regFile = [None] * self.size
 
   def setr(self, idx, val):
-    self.reg[idx] = val
+    self.regFile[idx] = val
 
   def getr(self, idx):
-    return self.reg[idx]
+    return self.regFile[idx]
 
 
 class RAT:
 
   def __init__(self, rf, size=8):
     self.size = size
-    self.reg = [None] * self.size
+    self.regFile = [None] * self.size
     self.rf = rf
 
   def setr(self, idx, val):
-    self.reg[idx] = val
+    self.regFile[idx] = val
 
   def getr(self, idx):
-    ref = self.reg[idx]
+    ref = self.regFile[idx]
     if ref:
       return ('RAT', ref)
     return ('ABS', self.rf.getr(idx))
@@ -57,10 +68,18 @@ class RAT:
     busdata = bus.getb()
     if busdata is None:
       return
-    rspos = self.reg.index(busdata['rs'])
+    rspos = self.regFile.index(busdata['rs'])
     if rspos:
-      self.rf[rspos] = busdata['val']
-      self.reg[rspos] = None
+      self.rf.setr(rspos, busdata['val'])
+      self.regFile[rspos] = None
+
+  def __repr__(self):
+    headers = ['#', 'RF', 'RAT']
+    table = remNone([[i, self.rf.getr(i), 'RS%d' % reg if reg is not None else reg] for (i, reg) in enumerate(self.regFile)])
+    return tabulate(table, headers, tablefmt='fancy_grid')
+  
+  def __str__(self):
+    return repr(self)
 
 
 class Bus:
@@ -116,9 +135,9 @@ class ReserSt:
   def __init__(self, idx=None):
     fields = ['op', 'j', 'k', 'disp']
     self.content = {
-        'idx': idx,
-        'valid': False,
-        'busy': False,
+      'idx': idx,
+      'busy': 0,
+      'disp': None,
     }
     self.t = {'issue': None, 'capture': None, 'dispatch': None}
     for field in fields:
@@ -126,8 +145,7 @@ class ReserSt:
 
   def setr(self, instr, rat):
     [opcode, res, op1, op2] = instr
-    self.content['valid'] = True
-    self.content['busy'] = True
+    self.content['busy'] = 1
     self.content['op'] = opcode
     self.content['j'] = rat.getr(op1)
     self.content['k'] = rat.getr(op2)
@@ -141,11 +159,15 @@ class ReserSt:
       self.content['k'] = ('ABS', busdata['val'])
 
   def clear(self):
-    self.valid = False
+    self.__init__()
+
+  def free(self):
+    self.content['busy'] = 0
 
   def dispatch(self, alu):
     if self.content['j'][0] == 'ABS' and self.content['k'][
         0] == 'ABS' and self.t['issue'] != currT:
+      self.content['disp'] = 1
       return (True,
               alu.execute([
                   self.content['op'], self.content['idx'], self.content['j'][1],
@@ -153,11 +175,18 @@ class ReserSt:
               ]))
     return (False, None)
 
-  def __str__(self):
-    return json.dumps(self.content)
-
-  def __repr__(self):
-    return json.dumps(self.content)
+  def getEntries(self):
+    c = self.content
+    v = {'j': None, 'k': None}
+    q = {'j': None, 'k': None}
+    for op in ['j', 'k']:
+      if c[op]:
+        if c[op][0] == 'RAT':
+          q[op] = c[op][1]
+        else:
+          v[op] = c[op][1]
+    
+    return remNone(['RS%d' % c['idx'], c['busy'], v['j'], v['k'], q['j'], q['k'], c['disp']])
 
 
 class ReserALU:
@@ -194,6 +223,7 @@ class ReserALU:
       RSi.capture(busdata)
 
   def clear(self, idx):
+    self.RS[idx].free()
     self.valid[idx] = 0
     self.freed[idx] = currT
 
@@ -208,8 +238,8 @@ class ReserALU:
   def broadcast(self, bus):
     self.alu.broadcast(bus)
 
-  def __str__(self):
-    return json.dumps(map(lambda x: x.content, self.RS))
+  def getEntries(self):
+    return [x.getEntries() for x in self.RS]
 
 
 class ReserStGrp:
@@ -256,7 +286,8 @@ class ReserStGrp:
   def setr(self, instr):
     if instr[0] < self.RG['A'].size:
       self.RG['A'].setr(instr, self.rat)
-    self.RG['M'].setr(instr, self.rat)
+    else:
+      self.RG['M'].setr(instr, self.rat)
 
   def isFull(self, instr):
     if instr[0] < self.RG['A'].size:
@@ -283,11 +314,15 @@ class ReserStGrp:
     self.RG['A'].broadcast(bus)
     self.RG['M'].broadcast(bus)
 
-  def __str__(self):
-    RG = {}
+  def __repr__(self):
+    headers = ['RS', 'Busy', 'Op', 'Vj', 'Vk', 'Qj', 'Qk', 'Disp']
+    table = []
     for t in self.types:
-      RG[t] = list(map(lambda x: x.content, self.RG[t].RS))
-    return json.dumps(RG)
+      table.extend(self.RG[t].getEntries())
+    return tabulate(table, headers, tablefmt='fancy_grid')
+  
+  def __str__(self):
+    return repr(self)
 
 
 #%%
@@ -304,7 +339,14 @@ for i in range(nins):
 for i in range(NREGS):
   rf.setr(i, int(clin()))
 
-for currT in range(T):
+for currT in range(T + 1):
+  print('\n\n @@@ CLOCK CYCLE = %d @@@\n\n' % currT)
+  print(' ### RESERVATION STATION ###')
+  print(rsg)
+  print(' ### RAT ###')
+  print(rat)
+  print(' ### INSTRUCTION QUEUE ###')
+  print(iq)
   # issue
   if not iq.isEmpty():
     instr = iq.peek()
@@ -321,4 +363,3 @@ for currT in range(T):
 
   # broadcast
   rsg.broadcast(bus)
-  print(rsg)
