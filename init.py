@@ -1,5 +1,6 @@
 #%%
 import json
+import traceback
 from collections import defaultdict
 from tabulate import tabulate
 
@@ -66,12 +67,14 @@ class RAT:
 
   def clear(self, bus):
     busdata = bus.getb()
-    if busdata is None:
-      return
-    rspos = self.regFile.index(busdata['rs'])
-    if rspos:
+    # if busdata is None:
+    #   return
+    try:
+      rspos = self.regFile.index(busdata['rs'])
       self.rf.setr(rspos, busdata['val'])
       self.regFile[rspos] = None
+    finally:
+      return
 
   def __repr__(self):
     headers = ['#', 'RF', 'RAT']
@@ -85,13 +88,19 @@ class RAT:
 class Bus:
 
   def __init__(self):
-    self.data = None
+    self.data = {'rs': None, 'val': None}
 
   def getb(self):
     return self.data
 
   def setb(self, data):
     self.data = data
+
+  def __repr__(self):
+    return tabulate(remNone([self.data['rs'], self.data['val']]), ['RS', 'VAL'], tablefmt='fancy_grid')
+
+  def __str__(self):
+    return repr(self)
 
 
 class ALU:
@@ -114,10 +123,11 @@ class ALU:
     self.res = res
     self.op1 = op1
     self.op2 = op2
+    print('!!!!!!!! ALU exected till %d!!!!!!!\n' %self.endT)
     return self.endT
 
   def isBusy(self):
-    return self.endT < currT
+    return self.endT > currT
 
   def broadcast(self, bus):
     if self.opcode is None:
@@ -125,7 +135,7 @@ class ALU:
     if self.endT == currT:
       res = {
           'rs': self.res,
-          'val': self.functs[self.opcode].funct(self.op1, self.op2)
+          'val': self.functs[self.opcode]['funct'](self.op1, self.op2)
       }
       bus.setb(res)
 
@@ -139,7 +149,7 @@ class ReserSt:
       'busy': 0,
       'disp': None,
     }
-    self.t = {'issue': None, 'capture': None, 'dispatch': None}
+    self.t = {'issue': None, 'capture': None}
     for field in fields:
       self.content[field] = None
 
@@ -165,15 +175,17 @@ class ReserSt:
     self.content['busy'] = 0
 
   def dispatch(self, alu):
-    if self.content['j'][0] == 'ABS' and self.content['k'][
-        0] == 'ABS' and self.t['issue'] != currT:
-      self.content['disp'] = 1
-      return (True,
-              alu.execute([
-                  self.content['op'], self.content['idx'], self.content['j'][1],
-                  self.content['k'][1]
-              ]))
-    return (False, None)
+    try:
+      if self.content['j'][0] == 'ABS' and self.content['k'][
+          0] == 'ABS' and self.t['issue'] != currT and (self.content['disp'] is None):
+        self.content['disp'] = currT
+        return (True,
+                alu.execute([
+                    self.content['op'], self.content['idx'], self.content['j'][1],
+                    self.content['k'][1]
+                ]))
+    finally:
+      return (False, None)
 
   def getEntries(self):
     c = self.content
@@ -186,7 +198,7 @@ class ReserSt:
         else:
           v[op] = c[op][1]
     
-    return remNone(['RS%d' % c['idx'], c['busy'], v['j'], v['k'], q['j'], q['k'], c['disp']])
+    return remNone(['RS%d' % c['idx'], c['busy'], c['op'], v['j'], v['k'], q['j'], q['k'], c['disp']])
 
 
 class ReserALU:
@@ -247,31 +259,27 @@ class ReserStGrp:
   def __init__(self, rat, A=3, M=2):
     self.RG = {
         'A':
-            ReserALU('A', A, [
-                {
-                    'opcode': 0,
+            ReserALU('A', A, {
+                0: {
                     'funct': (lambda x, y: x + y),
                     't': 2,
                 },
-                {
-                    'opcode': 1,
+                1: {
                     'funct': (lambda x, y: x - y),
                     't': 2,
                 },
-            ]),
+            }),
         'M':
-            ReserALU('M', M, [
-                {
-                    'opcode': 2,
+            ReserALU('M', M, {
+                2: {
                     'funct': (lambda x, y: x * y),
                     't': 10,
                 },
-                {
-                    'opcode': 3,
+                3: {
                     'funct': (lambda x, y: x / y),
                     't': 40
                 },
-            ], A)
+            }, A)
     }
     self.types = ['A', 'M']
     self.rat = rat
@@ -284,19 +292,19 @@ class ReserStGrp:
     return self.RG['M'].getr(idx - self.RG['A'].size)
 
   def setr(self, instr):
-    if instr[0] < self.RG['A'].size:
+    if instr[0] < 2:
       self.RG['A'].setr(instr, self.rat)
     else:
       self.RG['M'].setr(instr, self.rat)
 
   def isFull(self, instr):
-    if instr[0] < self.RG['A'].size:
+    if instr[0] < 2:
       return self.RG['A'].isFull()
     return self.RG['M'].isFull()
 
   def capture(self, bus):
     busdata = bus.getb()
-    if busdata:
+    if busdata['rs']:
       self.RG['A'].capture(busdata)
       self.RG['M'].capture(busdata)
       if busdata['rs'] < self.RG['A'].size:
@@ -307,7 +315,7 @@ class ReserStGrp:
   def dispatch(self):
     endTA = self.RG['A'].dispatch()
     endTM = self.RG['M'].dispatch()
-    if endTA == endTM:
+    if endTA[0] == True and endTA == endTM:
       self.RG['A'].alu.endT += 1
 
   def broadcast(self, bus):
@@ -339,14 +347,9 @@ for i in range(nins):
 for i in range(NREGS):
   rf.setr(i, int(clin()))
 
-for currT in range(T + 1):
-  print('\n\n @@@ CLOCK CYCLE = %d @@@\n\n' % currT)
-  print(' ### RESERVATION STATION ###')
-  print(rsg)
-  print(' ### RAT ###')
-  print(rat)
-  print(' ### INSTRUCTION QUEUE ###')
-  print(iq)
+for currT in range(1, T + 1):
+  print('\n\n @@@ CLOCK CYCLE = %d @@@\n\n' % (currT))
+  
   # issue
   if not iq.isEmpty():
     instr = iq.peek()
@@ -358,8 +361,16 @@ for currT in range(T + 1):
   rsg.capture(bus)
   rat.clear(bus)
 
-  # dispatch
-  rsg.dispatch()
-
   # broadcast
   rsg.broadcast(bus)
+
+  # dispatch
+  rsg.dispatch()
+  
+
+  print(' ### RESERVATION STATION ###')
+  print(rsg)
+  print(' ### RAT ###')
+  print(rat)
+  print(' ### INSTRUCTION QUEUE ###')
+  print(iq)
