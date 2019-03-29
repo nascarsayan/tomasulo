@@ -5,18 +5,19 @@
 #### Requirements
 - python3
 - pip3 packages:
-  * tabulate ; Used to print pretty tables
+  * `tabulate` (Used to print pretty tables)
 
 To install these:
 
 ```sh
 pip3 -m venv venv
 source ./venv/bin/activate
+pip3 install -r requirements.txt
 ```
 
 The input file specified is `input.txt`. Change the contents according to the specification and redirect it to `input.txt` for the result.
 
-Run the code taking input from `input.txt` and producing the output to `output.txt`:
+Run the code taking the input from `input.txt` and producing the output to `output.txt`:
 
 ```
 python3 init.py < input.txt > output.txt
