@@ -171,6 +171,7 @@ class Bus:
 
   Methods
   -------
+  clear: Clear the bus data
   getb: Get the data present in the bus
   setb: Set the data present in the bus
 
