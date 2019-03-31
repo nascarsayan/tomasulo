@@ -6,9 +6,6 @@ Simulate the Tomasulo Algorithm.
 Specifications: ./assgnSpec.pdf
 """
 #%%
-import json
-import traceback
-from collections import defaultdict
 from tabulate import tabulate
 
 NREGS = 8  # number of registers
@@ -75,7 +72,7 @@ class InstrQ:
     table = []
     for instr in self.queue:
       row = [self.funcmap[instr[0]]]
-      row.extend(['RS%d' % i for i in instr[1:]])
+      row.extend(['R%d' % i for i in instr[1:]])
       table.append(row)
     return tabulate(table, headers, tablefmt='fancy_grid')
 
@@ -136,7 +133,7 @@ class RAT:
 
   def getr(self, idx):
     ref = self.regFile[idx]
-    if ref:
+    if ref is not None:
       return ('RAT', ref)
     return ('ABS', self.rf.getr(idx))
 
@@ -180,6 +177,10 @@ class Bus:
   """
 
   def __init__(self):
+    self.data = None
+    self.reset()
+
+  def reset(self):
     self.data = {'rs': None, 'val': None}
 
   def getb(self):
@@ -236,7 +237,7 @@ class ALU:
     self.res = res
     self.op1 = op1
     self.op2 = op2
-    # print('!!!!!!!! ALU exected till %d!!!!!!!\n' %self.endT)
+    # print('!!!!!!!! ALU exected till %d!!!!!!!\n' % self.endT)
     return self.endT
 
   def isBusy(self):
@@ -244,13 +245,14 @@ class ALU:
 
   def broadcast(self, bus):
     if self.opcode is None:
-      return
-    if self.endT == currT:
+      return False
+    if self.endT <= currT:
       res = {
           'rs': self.res,
           'val': self.functs[self.opcode]['funct'](self.op1, self.op2)
       }
       bus.setb(res)
+      return True
 
 
 class ReserSt:
@@ -321,19 +323,26 @@ class ReserSt:
       return (False, None)
 
   def getEntries(self):
+
+    def rsAppend(v):
+      if v is not None:
+        return 'RS%d' % v
+      return ''
+
     c = self.content
     v = {'j': None, 'k': None}
     q = {'j': None, 'k': None}
     for op in ['j', 'k']:
-      if c[op]:
+      if c[op] is not None:
         if c[op][0] == 'RAT':
           q[op] = c[op][1]
         else:
           v[op] = c[op][1]
 
     return remNone([
-        'RS%d' % c['idx'], c['busy'], c['op'], v['j'], v['k'], q['j'], q['k'],
-        c['disp']
+        'RS%d' % c['idx'], c['busy'], c['op'], v['j'], v['k'],
+        rsAppend(q['j']),
+        rsAppend(q['k']), c['disp']
     ])
 
 
@@ -409,7 +418,7 @@ class ReserALU:
     return (False, None)
 
   def broadcast(self, bus):
-    self.alu.broadcast(bus)
+    return self.alu.broadcast(bus)
 
   def getEntries(self):
     return [x.getEntries() for x in self.RS]
@@ -466,11 +475,10 @@ class ReserStGrp:
     self.rat = rat
 
   def getr(self, idx):
-    if not idx:
-      return
-    if idx < self.RG['A'].size:
-      return self.RG['A'].getr(idx)
-    return self.RG['M'].getr(idx - self.RG['A'].size)
+    if idx >= 0 and idx <= self.RG['A'].size + self.RG['M'].size:
+      if idx < self.RG['A'].size:
+        return self.RG['A'].getr(idx)
+      return self.RG['M'].getr(idx - self.RG['A'].size)
 
   def setr(self, instr):
     if instr[0] < 2:
@@ -500,11 +508,11 @@ class ReserStGrp:
       self.RG['A'].alu.endT += 1
 
   def broadcast(self, bus):
-    self.RG['A'].broadcast(bus)
-    self.RG['M'].broadcast(bus)
+    if not self.RG['M'].broadcast(bus):
+      self.RG['A'].broadcast(bus)
 
   def __repr__(self):
-    headers = ['RS#', 'Busy', 'Op', 'Vj', 'Vk', 'Qj', 'Qk', 'Disp']
+    headers = ['RS#', 'Busy', 'Op', 'Vj', 'Vk', 'Qj', 'Qk', 'Disp (T)']
     table = []
     for t in self.types:
       table.extend(self.RG[t].getEntries())
@@ -543,6 +551,7 @@ for currT in range(1, T + 1):
       iq.pop()
 
   # broadcast
+  bus.reset()
   rsg.broadcast(bus)
 
   # capture
