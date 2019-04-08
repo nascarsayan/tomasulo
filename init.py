@@ -238,7 +238,7 @@ class ALU:
     self.res = res
     self.op1 = op1
     self.op2 = op2
-    # print('!!!!!!!! ALU exected till %d!!!!!!!\n' % self.endT)
+    # print('!!!!!!!! ALU executed till %d!!!!!!!\n' % self.endT)
     return self.endT
 
   def isBusy(self):
@@ -247,7 +247,7 @@ class ALU:
   def broadcast(self, bus):
     if self.opcode is None:
       return False
-    if self.endT <= currT:
+    if self.endT == currT:
       res = {
           'rs': self.res,
           'val': self.functs[self.opcode]['funct'](self.op1, self.op2)
@@ -287,7 +287,7 @@ class ReserSt:
     cfields = ['disp', 'op', 'j', 'k']
     for field in cfields:
       self.content[field] = None
-    tfields = ['issue']
+    tfields = ['issue', 'capture']
     for field in tfields:
       self.t[field] = None
 
@@ -303,8 +303,10 @@ class ReserSt:
   def capture(self, busdata):
     if self.content['j'] == ('RAT', busdata['rs']):
       self.content['j'] = ('ABS', busdata['val'])
+      self.t['capture'] = currT
     if self.content['k'] == ('RAT', busdata['rs']):
       self.content['k'] = ('ABS', busdata['val'])
+      self.t['capture'] = currT
 
   def free(self):
     self.content['busy'] = 0
@@ -312,8 +314,8 @@ class ReserSt:
   def dispatch(self, alu):
     try:
       if self.content['j'][0] == 'ABS' and self.content['k'][
-          0] == 'ABS' and self.t['issue'] != currT and (self.content['disp'] is
-                                                        None):
+          0] == 'ABS' and self.t['issue'] != currT and self.t[
+              'capture'] != currT and (self.content['disp'] is None):
         self.content['disp'] = currT
         return (True,
                 alu.execute([
@@ -532,6 +534,8 @@ rsg = ReserStGrp(rat)
 
 nins = int(clin())
 T = int(clin())
+if (T > 10):
+  print('Warning!!! Instruction Queue might overflow! Still trying to execute...')
 for i in range(nins):
   iq.push(list(map(lambda x: int(x), clin().split())))
 for i in range(NREGS):
