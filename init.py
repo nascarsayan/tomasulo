@@ -325,11 +325,16 @@ class ReserSt:
     finally:
       return (False, None)
 
-  def getEntries(self):
+  def getEntries(self, functs):
 
     def rsAppend(v):
       if v is not None:
         return 'RS%d' % v
+      return ''
+    
+    def getOp(functs, code):
+      if code is not None:
+        return functs[code]['name']
       return ''
 
     c = self.content
@@ -343,7 +348,7 @@ class ReserSt:
           v[op] = c[op][1]
 
     return remNone([
-        'RS%d' % c['idx'], c['busy'], c['op'], v['j'], v['k'],
+        'RS%d' % c['idx'], c['busy'], getOp(functs, c['op']), v['j'], v['k'],
         rsAppend(q['j']),
         rsAppend(q['k']), c['disp']
     ])
@@ -424,7 +429,7 @@ class ReserALU:
     return self.alu.broadcast(bus)
 
   def getEntries(self):
-    return [x.getEntries() for x in self.RS]
+    return [x.getEntries(self.alu.functs) for x in self.RS]
 
 
 class ReserStGrp:
@@ -455,10 +460,12 @@ class ReserStGrp:
                     0: {
                         'funct': (lambda x, y: x + y),
                         't': 2,
+                        'name': 'ADD',
                     },
                     1: {
                         'funct': (lambda x, y: x - y),
                         't': 2,
+                        'name': 'SUB',
                     },
                 }),
         'M':
@@ -467,10 +474,12 @@ class ReserStGrp:
                     2: {
                         'funct': (lambda x, y: x * y),
                         't': 10,
+                        'name': 'MUL',
                     },
                     3: {
                         'funct': (lambda x, y: x / y),
-                        't': 40
+                        't': 40,
+                        'name': 'DIV',
                     },
                 }, A)
     }
